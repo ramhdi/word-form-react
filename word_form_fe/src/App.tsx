@@ -1,6 +1,11 @@
-import { useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Alert, AlertDescription } from "@/components/ui/alert"
+import { useState, useEffect } from 'react';
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import { RefreshCw } from 'lucide-react';
+import { Worker, Viewer } from '@react-pdf-viewer/core';
+import '@react-pdf-viewer/core/lib/styles/index.css';
+import '@react-pdf-viewer/default-layout/lib/styles/index.css';
 
 interface FormData {
   name: string;
@@ -23,6 +28,8 @@ const MemberRegistrationForm = () => {
     message: '',
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [isLoadingPreview, setIsLoadingPreview] = useState(false);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     setFormData(prev => ({
@@ -30,6 +37,48 @@ const MemberRegistrationForm = () => {
       [e.target.name]: e.target.value
     }));
   };
+
+  const updatePreview = async () => {
+    setIsLoadingPreview(true);
+    try {
+      const response = await fetch('http://localhost:3000/api/preview-doc', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(formData),
+      });
+
+      if (!response.ok) throw new Error('Failed to generate preview');
+
+      const pdfBlob = await response.blob();
+      const url = URL.createObjectURL(pdfBlob);
+
+      // Clean up old preview URL if it exists
+      if (previewUrl) {
+        URL.revokeObjectURL(previewUrl);
+      }
+
+      setPreviewUrl(url);
+    } catch (error) {
+      console.error('Preview error:', error);
+      setStatus({
+        type: 'error',
+        message: 'Failed to generate preview'
+      });
+    } finally {
+      setIsLoadingPreview(false);
+    }
+  };
+
+  useEffect(() => {
+    return () => {
+      // Cleanup preview URL when component unmounts
+      if (previewUrl) {
+        URL.revokeObjectURL(previewUrl);
+      }
+    };
+  }, [previewUrl]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -51,26 +100,21 @@ const MemberRegistrationForm = () => {
         throw new Error('Failed to generate document');
       }
 
-      // Get the filename from the Content-Disposition header
       const contentDisposition = response.headers.get('Content-Disposition');
-
       let filename = 'member-registration.docx';
+
       if (contentDisposition) {
-        // Try UTF-8 filename first
         const utf8FilenameMatch = contentDisposition.match(/filename\*=UTF-8''([^;]+)/);
         if (utf8FilenameMatch) {
           filename = decodeURIComponent(utf8FilenameMatch[1]);
         } else {
-          // Fall back to regular filename
           const regularFilenameMatch = contentDisposition.match(/filename="([^"]+)"/);
           if (regularFilenameMatch) {
             filename = regularFilenameMatch[1];
           }
         }
       }
-      console.log('Extracted filename:', filename);
 
-      // Convert response to blob and download
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -88,7 +132,7 @@ const MemberRegistrationForm = () => {
     } catch (error) {
       setStatus({
         type: 'error',
-        message: `Failed to generate document. Please try again. ${error}`
+        message: `Failed to generate document: ${error}`
       });
     } finally {
       setIsSubmitting(false);
@@ -96,98 +140,147 @@ const MemberRegistrationForm = () => {
   };
 
   return (
-    <Card className="w-full max-w-2xl mx-auto">
-      <CardHeader>
-        <CardTitle>New Member Registration Form</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <form
-          onSubmit={handleSubmit}
-          className="space-y-4"
-          autoComplete="off"
-          spellCheck="false"
-          data-form-type="other"
-        >
-          <div className="space-y-2">
-            <label className="block text-sm font-medium">Name</label>
-            <input
-              type="text"
-              name="name"
-              value={formData.name}
-              onChange={handleChange}
-              required
-              className="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              autoComplete="new-password"
-              autoSave="off"
-            />
-          </div>
+    <div className="flex gap-4 p-4 max-w-[1600px] mx-auto">
+      {/* Form Section */}
+      <div className="w-1/2">
+        <Card>
+          <CardHeader>
+            <CardTitle>New Member Registration Form</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <form
+              onSubmit={handleSubmit}
+              className="space-y-4"
+              autoComplete="off"
+              spellCheck="false"
+              data-form-type="other"
+            >
+              <div className="space-y-2">
+                <label className="block text-sm font-medium">Name</label>
+                <input
+                  type="text"
+                  name="name"
+                  value={formData.name}
+                  onChange={handleChange}
+                  required
+                  className="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  autoComplete="new-password"
+                  autoSave="off"
+                />
+              </div>
 
-          <div className="space-y-2">
-            <label className="block text-sm font-medium">ID Card Number</label>
-            <input
-              type="text"
-              name="idCardNumber"
-              value={formData.idCardNumber}
-              onChange={handleChange}
-              required
-              className="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            />
-          </div>
+              <div className="space-y-2">
+                <label className="block text-sm font-medium">ID Card Number</label>
+                <input
+                  type="text"
+                  name="idCardNumber"
+                  value={formData.idCardNumber}
+                  onChange={handleChange}
+                  required
+                  className="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  autoComplete="new-password"
+                  autoSave="off"
+                />
+              </div>
 
-          <div className="space-y-2">
-            <label className="block text-sm font-medium">Email</label>
-            <input
-              type="email"
-              name="email"
-              value={formData.email}
-              onChange={handleChange}
-              required
-              className="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            />
-          </div>
+              <div className="space-y-2">
+                <label className="block text-sm font-medium">Email</label>
+                <input
+                  type="email"
+                  name="email"
+                  value={formData.email}
+                  onChange={handleChange}
+                  required
+                  className="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  autoComplete="new-password"
+                  autoSave="off"
+                />
+              </div>
 
-          <div className="space-y-2">
-            <label className="block text-sm font-medium">Phone</label>
-            <input
-              type="tel"
-              name="phone"
-              value={formData.phone}
-              onChange={handleChange}
-              required
-              className="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            />
-          </div>
+              <div className="space-y-2">
+                <label className="block text-sm font-medium">Phone</label>
+                <input
+                  type="tel"
+                  name="phone"
+                  value={formData.phone}
+                  onChange={handleChange}
+                  required
+                  className="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  autoComplete="new-password"
+                  autoSave="off"
+                />
+              </div>
 
-          <div className="space-y-2">
-            <label className="block text-sm font-medium">Address</label>
-            <textarea
-              name="address"
-              value={formData.address}
-              onChange={handleChange}
-              required
-              rows={4}
-              className="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            />
-          </div>
+              <div className="space-y-2">
+                <label className="block text-sm font-medium">Address</label>
+                <textarea
+                  name="address"
+                  value={formData.address}
+                  onChange={handleChange}
+                  required
+                  rows={4}
+                  className="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  autoComplete="new-password"
+                  autoSave="off"
+                />
+              </div>
 
-          <button
-            type="submit"
-            disabled={isSubmitting}
-            className="w-full bg-blue-500 text-white p-2 rounded hover:bg-blue-600 disabled:bg-blue-300"
-          >
-            {isSubmitting ? 'Generating Document...' : 'Generate Document'}
-          </button>
+              <div className="flex gap-2">
+                <Button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className="flex-1"
+                >
+                  {isSubmitting ? 'Generating Document...' : 'Download Document'}
+                </Button>
 
-          {status.type && (
-            <Alert variant={status.type === 'success' ? 'default' : 'destructive'}>
-              <AlertDescription>
-                {status.message}
-              </AlertDescription>
-            </Alert>
-          )}
-        </form>
-      </CardContent>
-    </Card>
+                <Button
+                  type="button"
+                  onClick={updatePreview}
+                  disabled={isLoadingPreview}
+                  variant="outline"
+                >
+                  <RefreshCw className={`h-4 w-4 mr-2 ${isLoadingPreview ? 'animate-spin' : ''}`} />
+                  Refresh Preview
+                </Button>
+              </div>
+
+              {status.type && (
+                <Alert variant={status.type === 'success' ? 'default' : 'destructive'}>
+                  <AlertDescription>
+                    {status.message}
+                  </AlertDescription>
+                </Alert>
+              )}
+            </form>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Preview Section */}
+      <div className="w-1/2">
+        <Card className="h-full">
+          <CardHeader>
+            <CardTitle>Document Preview</CardTitle>
+          </CardHeader>
+          <CardContent className="h-full">
+            {previewUrl ? (
+              <Worker workerUrl="https://unpkg.com/pdfjs-dist@3.11.174/build/pdf.worker.min.js">
+                <div className="h-full">
+                  <Viewer
+                    fileUrl={previewUrl}
+                  />
+                </div>
+              </Worker>
+            ) : (
+              <div className="h-full flex items-center justify-center text-gray-500">
+                Click "Refresh Preview" to see the document preview
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+    </div>
   );
 };
 
